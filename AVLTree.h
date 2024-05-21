@@ -6,39 +6,36 @@
 #include <fstream>
 #include <functional>
 
-using namespace std;
-
 struct Event {
     int id;
-    string name;
-    string date;
-    string startTime;
-    string endTime;
+    std::string name;
+    std::string date;
+    std::string startTime;
+    std::string endTime;
 
-    Event() : id(0), name(""), date(""), startTime(""), endTime("") {}
-    Event(int i, string n, string d, string st, string et) : id(i), name(n), date(d), startTime(st), endTime(et) {}
+    Event() = default;
+
+    Event(int i, const std::string& n, const std::string& d, const std::string& s, const std::string& e)
+        : id(i), name(n), date(d), startTime(s), endTime(e) {}
 
     bool operator<(const Event& other) const {
-        if (date == other.date) {
-            return startTime < other.startTime;
-        }
-        return date < other.date;
+        if (date != other.date) return date < other.date;
+        return startTime < other.startTime;
     }
 
     bool operator>(const Event& other) const {
-        if (date == other.date) {
-            return startTime > other.startTime;
-        }
-        return date > other.date;
+        if (date != other.date) return date > other.date;
+        return startTime > other.startTime;
     }
 
-    bool operator==(const Event& other) const {
-        return date == other.date && startTime == other.startTime && endTime == other.endTime;
-    }
-
-    friend ostream& operator<<(ostream& os, const Event& e) {
-        os << e.id << ": " << e.name << " (" << e.date << " " << e.startTime << "-" << e.endTime << ")";
+    friend std::ostream& operator<<(std::ostream& os, const Event& event) {
+        os << event.id << " " << event.name << " " << event.date << " " << event.startTime << " " << event.endTime;
         return os;
+    }
+
+    friend std::istream& operator>>(std::istream& is, Event& event) {
+        is >> event.id >> event.name >> event.date >> event.startTime >> event.endTime;
+        return is;
     }
 };
 
@@ -65,7 +62,7 @@ private:
 
     void updateHeight(AVLNode* node) {
         if (node) {
-            node->height = 1 + max(height(node->left), height(node->right));
+            node->height = 1 + std::max(height(node->left), height(node->right));
         }
     }
 
@@ -137,10 +134,10 @@ private:
         return balance(node);
     }
 
-    void inorder(AVLNode* node, ostream& os) const {
+    void inorder(AVLNode* node, std::ostream& os) const {
         if (node) {
             inorder(node->left, os);
-            os << node->event << endl;
+            os << node->event << std::endl;
             inorder(node->right, os);
         }
     }
@@ -176,20 +173,6 @@ private:
         return balance(root);
     }
 
-    bool detectConflicts(AVLNode* node, const Event& newEvent) {
-        if (!node) return false;
-
-        if (!(newEvent.endTime <= node->event.startTime || newEvent.startTime >= node->event.endTime)) {
-            return true;
-        }
-
-        if (newEvent < node->event) {
-            return detectConflicts(node->left, newEvent);
-        } else {
-            return detectConflicts(node->right, newEvent);
-        }
-    }
-
 public:
     AVLTree() : root(nullptr) {}
 
@@ -201,37 +184,40 @@ public:
         root = remove(root, event);
     }
 
-    bool detectConflicts(const Event& event) {
-        return detectConflicts(root, event);
-    }
-
-    void visualize(const string& filename) const {
-        ofstream outfile(filename);
-        outfile << "digraph AVLTree {\n";
-        outfile << "node [fontname=\"Arial\"];\n";
-
-        function<void(AVLNode*, ofstream&)> writeNode = [&](AVLNode* node, ofstream& out) {
-            if (!node) return;
-            out << "\"" << node->event.name << "\";\n";
-            if (node->left) {
-                out << "\"" << node->event.name << "\" -> \"" << node->left->event.name << "\";\n";
-                writeNode(node->left, out);
-            }
-            if (node->right) {
-                out << "\"" << node->event.name << "\" -> \"" << node->right->event.name << "\";\n";
-                writeNode(node->right, out);
-            }
-        };
-
-        writeNode(root, outfile);
-
-        outfile << "}\n";
-    }
-
-    void inorder(ostream& os) const {
+    void inorder(std::ostream& os) const {
         inorder(root, os);
+    }
+
+    bool detectConflicts(const Event& newEvent) const {
+        return detectConflicts(root, newEvent);
+    }
+
+    bool detectConflicts(AVLNode* node, const Event& newEvent) const {
+        if (!node) return false;
+
+        if (!(newEvent.endTime <= node->event.startTime || newEvent.startTime >= node->event.endTime)) {
+            return true;
+        }
+
+        return detectConflicts(node->left, newEvent) || detectConflicts(node->right, newEvent);
+    }
+
+    void loadFromFile(const std::string& filename) {
+        std::ifstream infile(filename);
+        if (!infile.is_open()) {
+            return;
+        }
+
+        Event event;
+        while (infile >> event) {
+            insert(event);
+        }
+    }
+
+    void saveToFile(const std::string& filename) const {
+        std::ofstream outfile(filename);
+        inorder(outfile);
     }
 };
 
-#endif
-
+#endif // AVL_TREE_H
