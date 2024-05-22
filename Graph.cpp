@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <set>
 #include <sstream>
+#include <regex>
 #include "AVLTree.h"
 
 using namespace std;
@@ -24,17 +25,16 @@ public:
     }
 
     void addDependency(int fromEventId, int toEventId) {
-    int fromIndex = -1, toIndex = -1;
-    for (size_t i = 0; i < events.size(); ++i) {
-        if (events[i].id == fromEventId) fromIndex = i;
-        if (events[i].id == toEventId) toIndex = i;
+        int fromIndex = -1, toIndex = -1;
+        for (size_t i = 0; i < events.size(); ++i) {
+            if (events[i].id == fromEventId) fromIndex = i;
+            if (events[i].id == toEventId) toIndex = i;
+        }
+        if (fromIndex != -1 && toIndex != -1) {
+            dependencies[fromIndex].push_back(toEventId);
+            events[fromIndex].dependencies.insert(toEventId);
+        }
     }
-    if (fromIndex != -1 && toIndex != -1) {
-        dependencies[fromIndex].push_back(toEventId);
-        events[fromIndex].dependencies.insert(toEventId);
-    }
-}
-
 
     void updateEventName(int id, const string& newName) {
         for (auto& event : events) {
@@ -112,56 +112,54 @@ public:
     }
 
     void loadEvents(const string& filename, AVLTree& avlTree) {
-    ifstream infile(filename);
-    if (!infile.is_open()) {
-        return;
-    }
-
-    events.clear();
-    dependencies.clear();
-    string line;
-    int maxId = 0;
-
-    while (getline(infile, line)) {
-        stringstream ss(line);
-        string token;
-        Event event;
-
-        getline(ss, token, ',');
-        event.id = stoi(token);
-        getline(ss, token, ',');
-        event.name = token;
-        getline(ss, token, ',');
-        event.date = token;
-        getline(ss, token, ',');
-        event.startTime = token;
-        getline(ss, token, ',');
-        event.endTime = token;
-
-        addEvent(event);
-        avlTree.insert(event); // Insert event into AVL tree
-
-        while (getline(ss, token, ',')) {
-            int depId = stoi(token);
-            event.dependencies.insert(depId);
+        ifstream infile(filename);
+        if (!infile.is_open()) {
+            return;
         }
 
-        if (event.id > maxId) {
-            maxId = event.id;
+        events.clear();
+        dependencies.clear();
+        string line;
+        int maxId = 0;
+
+        while (getline(infile, line)) {
+            stringstream ss(line);
+            string token;
+            Event event;
+
+            getline(ss, token, ',');
+            event.id = stoi(token);
+            getline(ss, token, ',');
+            event.name = token;
+            getline(ss, token, ',');
+            event.date = token;
+            getline(ss, token, ',');
+            event.startTime = token;
+            getline(ss, token, ',');
+            event.endTime = token;
+
+            addEvent(event);
+            avlTree.insert(event); // Insert event into AVL tree
+
+            while (getline(ss, token, ',')) {
+                int depId = stoi(token);
+                event.dependencies.insert(depId);
+            }
+
+            if (event.id > maxId) {
+                maxId = event.id;
+            }
+        }
+
+        e_id = maxId + 1; // Initialize e_id to one more than the highest ID
+
+        // Re-add dependencies after all events are loaded
+        for (const auto& event : events) {
+            for (int depId : event.dependencies) {
+                addDependency(event.id, depId);
+            }
         }
     }
-
-    e_id = maxId + 1; // Initialize e_id to one more than the highest ID
-
-    // Re-add dependencies after all events are loaded
-    for (const auto& event : events) {
-        for (int depId : event.dependencies) {
-            addDependency(event.id, depId);
-        }
-    }
-}
-
-
 
     void visualize_event_graph() const {
         clear();
@@ -190,17 +188,16 @@ public:
     }
 
     void saveEvents(const string& filename) const {
-    ofstream outfile(filename);
-    for (const auto& event : events) {
-        outfile << event.id << "," << event.name << "," << event.date << "," 
-                << event.startTime << "," << event.endTime;
-        for (int dep : event.dependencies) {
-            outfile << "," << dep;
+        ofstream outfile(filename);
+        for (const auto& event : events) {
+            outfile << event.id << "," << event.name << "," << event.date << "," 
+                    << event.startTime << "," << event.endTime;
+            for (int dep : event.dependencies) {
+                outfile << "," << dep;
+            }
+            outfile << endl;
         }
-        outfile << endl;
     }
-}
-
 };
 
 // Initialize Ncurses
@@ -257,28 +254,56 @@ void display_menu() {
     refresh();
 }
 
+bool validate_date(const string& date) {
+    regex date_pattern("^\\d{4}-\\d{2}-\\d{2}$");
+    return regex_match(date, date_pattern);
+}
+
+bool validate_time(const string& time) {
+    regex time_pattern("^\\d{2}:\\d{2}$");
+    return regex_match(time, time_pattern);
+}
+
 void create_event(EventGraph& graph, AVLTree& avlTree) {
     clear();
     mvprintw(0, 0, "Enter event name: ");
     char name[100];
     getstr(name);
 
-    mvprintw(1, 0, "Enter event date (YYYY-MM-DD): ");
-    char date[20];
-    getstr(date);
+    string date;
+    while (true) {
+        mvprintw(1, 0, "Enter event date (YYYY-MM-DD): ");
+        char date_cstr[20];
+        getstr(date_cstr);
+        date = string(date_cstr);
+        if (validate_date(date)) break;
+        mvprintw(2, 0, "Invalid date format. Please enter again.");
+    }
 
-    mvprintw(2, 0, "Enter event start time (HH:MM): ");
-    char startTime[10];
-    getstr(startTime);
+    string startTime;
+    while (true) {
+        mvprintw(3, 0, "Enter event start time (HH:MM): ");
+        char startTime_cstr[10];
+        getstr(startTime_cstr);
+        startTime = string(startTime_cstr);
+        if (validate_time(startTime)) break;
+        mvprintw(4, 0, "Invalid time format. Please enter again.");
+    }
 
-    mvprintw(3, 0, "Enter event end time (HH:MM): ");
-    char endTime[10];
-    getstr(endTime);
+    string endTime;
+    while (true) {
+        mvprintw(5, 0, "Enter event end time (HH:MM): ");
+        char endTime_cstr[10];
+        getstr(endTime_cstr);
+        endTime = string(endTime_cstr);
+        if (validate_time(endTime)) break;
+        mvprintw(6, 0, "Invalid time format. Please enter again.");
+    }
 
     Event newEvent(e_id++, name, date, startTime, endTime);
 
     if (graph.hasConflict(newEvent)) {
-        mvprintw(5, 0, "Error: Event conflicts with existing events.");
+        mvprintw(8, 0, "Error: Event conflicts with existing events.");
         refresh();
         getch();
         return;
@@ -287,9 +312,9 @@ void create_event(EventGraph& graph, AVLTree& avlTree) {
     graph.addEvent(newEvent);
     avlTree.insert(newEvent);
 
-    mvprintw(5, 0, "Event created successfully.");
-    mvprintw(7, 0, "Your Event-id is: %d",e_id-1);
-    mvprintw(9, 0, "Press any key to return to the main menu...");
+    mvprintw(8, 0, "Event created successfully.");
+    mvprintw(10, 0, "Your Event-id is: %d", e_id - 1);
+    mvprintw(12, 0, "Press any key to return to the main menu...");
     refresh();
     getch();
 }
@@ -304,33 +329,51 @@ void update_event(EventGraph& graph) {
     char name[100];
     getstr(name);
 
-    mvprintw(2, 0, "Enter new event date (YYYY-MM-DD) (leave empty to keep current): ");
-    char date[20];
-    getstr(date);
+    string date;
+    while (true) {
+        mvprintw(2, 0, "Enter new event date (YYYY-MM-DD) (leave empty to keep current): ");
+        char date_cstr[20];
+        getstr(date_cstr);
+        date = string(date_cstr);
+        if (date.empty() || validate_date(date)) break;
+        mvprintw(3, 0, "Invalid date format. Please enter again.");
+    }
 
-    mvprintw(3, 0, "Enter new event start time (HH:MM) (leave empty to keep current): ");
-    char startTime[10];
-    getstr(startTime);
+    string startTime;
+    while (true) {
+        mvprintw(4, 0, "Enter new event start time (HH:MM) (leave empty to keep current): ");
+        char startTime_cstr[10];
+        getstr(startTime_cstr);
+        startTime = string(startTime_cstr);
+        if (startTime.empty() || validate_time(startTime)) break;
+        mvprintw(5, 0, "Invalid time format. Please enter again.");
+    }
 
-    mvprintw(4, 0, "Enter new event end time (HH:MM) (leave empty to keep current): ");
-    char endTime[10];
-    getstr(endTime);
+    string endTime;
+    while (true) {
+        mvprintw(6, 0, "Enter new event end time (HH:MM) (leave empty to keep current): ");
+        char endTime_cstr[10];
+        getstr(endTime_cstr);
+        endTime = string(endTime_cstr);
+        if (endTime.empty() || validate_time(endTime)) break;
+        mvprintw(7, 0, "Invalid time format. Please enter again.");
+    }
 
     if (strlen(name) > 0) {
         graph.updateEventName(id, name);
     }
-    if (strlen(date) > 0) {
+    if (!date.empty()) {
         graph.updateEventDate(id, date);
     }
-    if (strlen(startTime) > 0) {
+    if (!startTime.empty()) {
         graph.updateEventStartTime(id, startTime);
     }
-    if (strlen(endTime) > 0) {
+    if (!endTime.empty()) {
         graph.updateEventEndTime(id, endTime);
     }
 
-    mvprintw(6, 0, "Event updated successfully.");
-    mvprintw(8, 0, "Press any key to return to the main menu...");
+    mvprintw(9, 0, "Event updated successfully.");
+    mvprintw(11, 0, "Press any key to return to the main menu...");
     refresh();
     getch();
 }
