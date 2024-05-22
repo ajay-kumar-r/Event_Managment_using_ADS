@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <set>
 #include <algorithm>
 #include <fstream>
 #include <ncurses.h>
@@ -16,6 +17,7 @@ public:
     string date;
     string startTime;
     string endTime;
+    set<int> dependencies;
 
     Event(int id = 0, string name = "", string date = "", string startTime = "", string endTime = "")
         : id(id), name(name), date(date), startTime(startTime), endTime(endTime) {}
@@ -43,13 +45,30 @@ public:
 };
 
 ostream& operator<<(ostream& os, const Event& event) {
-    os << event.id << " " << event.name << " " << event.date << " " << event.startTime << " " << event.endTime;
-    return os;
+    os << event.id << "," << event.name << "," << event.date << "," << event.startTime << "," << event.endTime;
+        for (int dep : event.dependencies) {
+            os << "," << dep;
+        }
+        return os;
 }
 
 istream& operator>>(istream& is, Event& event) {
-    is >> event.id >> event.name >> event.date >> event.startTime >> event.endTime;
-    return is;
+    string line;
+        if (getline(is, line)) {
+            stringstream ss(line);
+            string token;
+            getline(ss, token, ',');
+            event.id = stoi(token);
+            getline(ss, event.name, ',');
+            getline(ss, event.date, ',');
+            getline(ss, event.startTime, ',');
+            getline(ss, event.endTime, ',');
+
+            while (getline(ss, token, ',')) {
+                event.dependencies.insert(stoi(token));
+            }
+        }
+        return is;
 }
 
 struct AVLNode {
