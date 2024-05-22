@@ -161,8 +161,8 @@ void display_menu() {
 
     mvprintw(starty + 3, startx + 5, "1. Create Event");
     mvprintw(starty + 4, startx + 5, "2. Update Event");
-    mvprintw(starty + 5, startx + 5, "3. View Schedule");
-    mvprintw(starty + 6, startx + 5, "4. Detect Conflicts");
+    mvprintw(starty + 5, startx + 5, "3. Delete Event");
+    mvprintw(starty + 6, startx + 5, "4. View Schedule");
     mvprintw(starty + 7, startx + 5, "5. Visualize Event Graph");
     mvprintw(starty + 8, startx + 5, "6. Visualize AVL Tree");
     mvprintw(starty + 9, startx + 5, "7. Exit");
@@ -249,11 +249,41 @@ void update_event(EventGraph& graph, AVLTree& avlTree) {
             break;
         }
         default:
-            mvprintw(8, 0, "Invalid choice. No changes made.");
-            break;
+            mvprintw(8, 0, "Invalid choice!");
     }
 
-    mvprintw(10, 0, "Event updated successfully! Press any key to return to the main menu...");
+    mvprintw(10, 0, "Event updated successfully!");
+    mvprintw(12, 0, "Press any key to return to the main menu...");
+    refresh();
+    getch();
+}
+
+void delete_event(EventGraph& graph, AVLTree& avlTree) {
+    clear();
+    mvprintw(0, 0, "Enter Event ID to Delete: ");
+    int id;
+    scanw("%d", &id);
+
+    avlTree.remove(id);
+    graph.deleteEvent(id);
+
+    mvprintw(2, 0, "Event deleted successfully!");
+    mvprintw(4, 0, "Press any key to return to the main menu...");
+    refresh();
+    getch();
+}
+
+void visualize_event_graph(const EventGraph& graph) {
+    clear();
+    mvprintw(0, 0, "Enter the filename to export the event graph (e.g., events.dot): ");
+    char filename[100];
+    getstr(filename);
+    graph.exportGraph(filename);
+
+    string command = "dot -Tpng " + string(filename) + " -o event_graph.png";
+    system(command.c_str());
+    mvprintw(2, 0, "Event graph exported and visualized as event_graph.png");
+    mvprintw(4, 0, "Press any key to return to the main menu...");
     refresh();
     getch();
 }
@@ -261,9 +291,9 @@ void update_event(EventGraph& graph, AVLTree& avlTree) {
 int main() {
     EventGraph graph;
     AVLTree avlTree;
+    string filename = "events.txt";
 
-    graph.loadEvents("events.txt");
-    avlTree.loadFromFile("avl_events.txt");
+    graph.loadEvents(filename);
 
     initialize_ncurses();
 
@@ -280,41 +310,26 @@ int main() {
                 update_event(graph, avlTree);
                 break;
             case 3:
+                delete_event(graph, avlTree);
+                break;
+            case 4:
                 graph.viewSchedule();
                 break;
-            case 4: {
-                // Detect Conflicts
+            case 5:
+                visualize_event_graph(graph);
                 break;
-            }
-            case 5: {
-                graph.exportGraph("event_graph.dot");
-                mvprintw(10, 0, "Event Graph exported as event_graph.dot");
-                mvprintw(11, 0, "Press any key to return to the main menu...");
-                refresh();
-                getch();
+            case 6:
+                avlTree.visualize();
                 break;
-            }
-            case 6: {
-                ofstream outfile("avl_tree.txt");
-                avlTree.inorder(outfile);
-                outfile.close();
-                mvprintw(10, 0, "AVL Tree exported as avl_tree.txt");
-                mvprintw(11, 0, "Press any key to return to the main menu...");
-                refresh();
-                getch();
-                break;
-            }
             case 7:
-                graph.saveEvents("events.txt");
-                avlTree.saveToFile("avl_events.txt");
+                graph.saveEvents(filename);
                 endwin();
                 return 0;
             default:
-                mvprintw(13, 0, "Invalid choice. Please try again.");
+                mvprintw(12, 0, "Invalid choice! Please try again.");
                 refresh();
                 getch();
         }
     }
-
     return 0;
 }
