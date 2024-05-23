@@ -102,6 +102,7 @@ public:
     }
 
     void visualize() const {
+        clear();
         ofstream outfile("avltree.dot");
         if (!outfile) {
             cerr << "Error creating dot file" << endl;
@@ -115,6 +116,10 @@ public:
         outfile.close();
         system("dot -Tpng avltree.dot -o avltree.png");
         system("xdg-open avltree.png");
+        mvprintw(2, 0, "Event graph exported and visualized");
+        mvprintw(4, 0, "Press any key to return to the main menu...");
+        refresh();
+        getch();
     }
 
 private:
