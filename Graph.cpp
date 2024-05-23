@@ -5,6 +5,9 @@
 #include <vector>
 #include <algorithm>
 #include <set>
+#include <stdexcept>
+#include <unordered_map>
+#include <stack>
 #include <sstream>
 #include <regex>
 #include "AVLTree.h"
@@ -77,6 +80,57 @@ public:
             return event.id == id;
         }), events.end());
     }
+    
+    Event findEventById(int id) const {
+    for (const auto& event : events) {
+        if (event.id == id) {
+            return event;
+        }
+    }
+    throw runtime_error("Event not found");
+}
+
+void topologicalSortUtil(int v, unordered_map<int, bool>& visited, stack<int>& Stack) {
+    // Mark the current node as visited
+    visited[v] = true;
+
+    // Recur for all the vertices adjacent to this vertex
+    for (int dep : findEventById(v).dependencies) {
+        if (!visited[dep]) {
+            topologicalSortUtil(dep, visited, Stack);
+        }
+    }
+
+    // Push current vertex to stack which stores the result
+    Stack.push(v);
+}
+
+// Topological sort function
+vector<Event> topologicalSort() {
+    stack<int> Stack;
+    unordered_map<int, bool> visited;
+    vector<Event> sortedEvents;
+
+    // Mark all the vertices as not visited
+    for (const auto& event : events) {
+        visited[event.id] = false;
+    }
+
+    // Call the recursive helper function to store Topological Sort starting from all vertices one by one
+    for (const auto& event : events) {
+        if (!visited[event.id]) {
+            topologicalSortUtil(event.id, visited, Stack);
+        }
+    }
+
+    // Pop all vertices from stack and add to the sorted list
+    while (!Stack.empty()) {
+        sortedEvents.push_back(findEventById(Stack.top()));
+        Stack.pop();
+    }
+
+    return sortedEvents;
+}
 
     void exportGraph(const string& filename) const {
         ofstream outfile(filename);
@@ -103,101 +157,119 @@ public:
     }
 
     bool hasConflict(const Event& newEvent) const {
-        for (const auto& event : events) {
-            if (!(newEvent.endTime <= event.startTime || newEvent.startTime >= event.endTime)) {
-                return true;
-            }
+    for (const auto& event : events) {
+        if (newEvent.date == event.date && 
+            !(newEvent.endTime <= event.startTime || newEvent.startTime >= event.endTime)) {
+            return true;
         }
-        return false;
     }
+    return false;
+}
+
 
     void loadEvents(const string& filename, AVLTree& avlTree) {
-        ifstream infile(filename);
-        if (!infile.is_open()) {
-            return;
-        }
+    ifstream infile(filename);
+    if (!infile.is_open()) {
+        return;
+    }
 
-        events.clear();
-        dependencies.clear();
-        string line;
-        int maxId = 0;
+    events.clear();
+    dependencies.clear();
+    string line;
+    int maxId = 0;
 
-        while (getline(infile, line)) {
-            stringstream ss(line);
-            string token;
-            Event event;
+    // First pass to load all events
+    while (getline(infile, line)) {
+        stringstream ss(line);
+        string token;
+        Event event;
 
-            getline(ss, token, ',');
-            event.id = stoi(token);
-            getline(ss, token, ',');
-            event.name = token;
-            getline(ss, token, ',');
-            event.date = token;
-            getline(ss, token, ',');
-            event.startTime = token;
-            getline(ss, token, ',');
-            event.endTime = token;
+        getline(ss, token, ',');
+        event.id = stoi(token);
+        getline(ss, token, ',');
+        event.name = token;
+        getline(ss, token, ',');
+        event.date = token;
+        getline(ss, token, ',');
+        event.startTime = token;
+        getline(ss, token, ',');
+        event.endTime = token;
 
-            addEvent(event);
-            avlTree.insert(event); // Insert event into AVL tree
+        events.push_back(event);
+        dependencies.push_back({}); // Initialize empty dependencies for each event
 
-            while (getline(ss, token, ',')) {
-                int depId = stoi(token);
-                event.dependencies.insert(depId);
-            }
+        avlTree.insert(event); // Insert event into AVL tree
 
-            if (event.id > maxId) {
-                maxId = event.id;
-            }
-        }
-
-        e_id = maxId + 1; // Initialize e_id to one more than the highest ID
-
-        // Re-add dependencies after all events are loaded
-        for (const auto& event : events) {
-            for (int depId : event.dependencies) {
-                addDependency(event.id, depId);
-            }
+        if (event.id > maxId) {
+            maxId = event.id;
         }
     }
+
+    e_id = maxId + 1; // Initialize e_id to one more than the highest ID
+
+    // Second pass to add dependencies
+    infile.clear();
+    infile.seekg(0, ios::beg);
+
+    while (getline(infile, line)) {
+        stringstream ss(line);
+        string token;
+        getline(ss, token, ',');
+        int eventId = stoi(token);
+
+        // Skip event details
+        for (int i = 0; i < 5; ++i) {
+            getline(ss, token, ',');
+        }
+
+        while (getline(ss, token, ',')) {
+            int depId = stoi(token);
+            addDependency(eventId, depId); // Add dependency for the event
+        }
+    }
+}
+
 
     void visualize_event_graph() const {
-        clear();
-        ofstream outfile("eventgraph.dot");
-        if (!outfile) {
-            cerr << "Error creating dot file" << endl;
-            return;
-        }
-        outfile << "digraph EventGraph {\n";
-        for (const auto& event : events) {
-            outfile << event.id << " [label=\"" << event.name << "\\n" << event.date << "\\n" << event.startTime << "-" << event.endTime << "\"];\n";
-        }
-        for (size_t i = 0; i < events.size(); ++i) {
-            for (int dep : dependencies[i]) {
-                outfile << events[i].id << " -> " << dep << ";\n";
-            }
-        }
-        outfile << "}\n";
-        outfile.close();
-        system("dot -Tpng eventgraph.dot -o eventgraph.png");
-        system("xdg-open eventgraph.png");
-        mvprintw(2, 0, "Event graph exported and visualized");
-        mvprintw(4, 0, "Press any key to return to the main menu...");
-        refresh();
-        getch();
+    clear();
+    ofstream outfile("eventgraph.dot");
+    if (!outfile) {
+        cerr << "Error creating dot file" << endl;
+        return;
     }
+    outfile << "digraph EventGraph {\n";
+    for (const auto& event : events) {
+        outfile << event.id << " [label=\"" << event.name << "\\n" << event.date << "\\n" << event.startTime << "-" << event.endTime << "\"];\n";
+    }
+    for (size_t i = 0; i < events.size(); ++i) {
+        for (int dep : dependencies[i]) {
+            outfile << events[i].id << " -> " << dep << ";\n";
+        }
+    }
+    outfile << "}\n";
+    outfile.close();
+    system("dot -Tpng eventgraph.dot -o eventgraph.png");
+    system("xdg-open eventgraph.png");
+    mvprintw(2, 0, "Event graph exported and visualized");
+    mvprintw(4, 0, "Press any key to return to the main menu...");
+    refresh();
+    getch();
+}
+
 
     void saveEvents(const string& filename) const {
-        ofstream outfile(filename);
-        for (const auto& event : events) {
-            outfile << event.id << "," << event.name << "," << event.date << "," 
-                    << event.startTime << "," << event.endTime;
-            for (int dep : event.dependencies) {
-                outfile << "," << dep;
-            }
-            outfile << endl;
+    ofstream outfile(filename);
+    for (const auto& event : events) {
+        outfile << event.id << "," << event.name << "," << event.date << "," 
+                << event.startTime << "," << event.endTime;
+        for (int dep : event.dependencies) {
+            outfile << "," << dep;
         }
+        outfile << endl;
     }
+}
+
+
 };
 
 // Initialize Ncurses
@@ -235,7 +307,7 @@ void display_menu() {
     clear();
     int starty = (LINES - 15) / 2;
     int startx = (COLS - 50) / 2;
-    draw_box(starty, startx, 12, 40, 2);
+    draw_box(starty, startx, 16, 40, 2);
 
     attron(COLOR_PAIR(3));
     mvprintw(starty + 1, startx + 13, "Event Scheduler");
@@ -247,9 +319,11 @@ void display_menu() {
     mvprintw(starty + 6, startx + 5, "4. View Schedule");
     mvprintw(starty + 7, startx + 5, "5. Visualize Event Graph");
     mvprintw(starty + 8, startx + 5, "6. Visualize AVL Tree");
-    mvprintw(starty + 9, startx + 5, "7. Add Dependency"); // New option to add dependencies
-    mvprintw(starty + 10, startx + 5, "8. Exit");
-    mvprintw(starty + 11, startx + 5, "Enter your choice: "); // Adjusted for the new option
+    mvprintw(starty + 9, startx + 5, "7. Add Dependency");
+    mvprintw(starty + 10, startx + 5, "8. Topological Sort"); // New option for topological sort
+    mvprintw(starty + 11, startx + 5, "9. Search Event");
+    mvprintw(starty + 12, startx + 5, "10. Exit");
+    mvprintw(starty + 14, startx + 5, "Enter your choice: "); // Adjusted for the new option
 
     refresh();
 }
@@ -300,7 +374,7 @@ void create_event(EventGraph& graph, AVLTree& avlTree) {
         mvprintw(6, 0, "Invalid time format. Please enter again.");
     }
 
-    Event newEvent(e_id++, name, date, startTime, endTime);
+    Event newEvent(e_id, name, date, startTime, endTime);
 
     if (graph.hasConflict(newEvent)) {
         mvprintw(8, 0, "Error: Event conflicts with existing events.");
@@ -311,6 +385,7 @@ void create_event(EventGraph& graph, AVLTree& avlTree) {
 
     graph.addEvent(newEvent);
     avlTree.insert(newEvent);
+    e_id++;
 
     mvprintw(8, 0, "Event created successfully.");
     mvprintw(10, 0, "Your Event-id is: %d", e_id - 1);
@@ -447,7 +522,41 @@ int main() {
         case 7:
             add_dependency(graph);
             break;
-        case 8:
+        case 8: {
+            clear();
+            mvprintw(0, 0, "Events in topological order:");
+            try {
+                vector<Event> sortedEvents = graph.topologicalSort();
+                int row = 1;
+                for (const auto& event : sortedEvents) {
+                    mvprintw(row++, 0, "%d: %s (%s %s-%s)", event.id, event.name.c_str(), event.date.c_str(), event.startTime.c_str(), event.endTime.c_str());
+                }
+            } catch (const runtime_error& e) {
+                mvprintw(2, 0, "Error: %s", e.what());
+            }
+            refresh();
+            mvprintw(LINES - 1, 0, "Press any key to return to the main menu...");
+            getch();
+            break;
+        }
+        case 9: {
+            clear();
+            mvprintw(0, 0, "Enter the event-id: ");
+            int t;
+            scanw("%d", &t);
+            try {
+               Event event;
+               event=graph.findEventById(t);
+               mvprintw(1, 0, "%d: %s (%s %s-%s)", event.id, event.name.c_str(), event.date.c_str(), event.startTime.c_str(), event.endTime.c_str());
+            } catch (const runtime_error& e) {
+                mvprintw(2, 0, "Error: %s", e.what());
+            }
+            refresh();
+            mvprintw(3, 0, "Press any key to return to the main menu...");
+            getch();
+            break;
+        }
+        case 10:
             endwin(); // End ncurses mode
             return 0;
         default:
