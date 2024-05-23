@@ -27,6 +27,34 @@ public:
         dependencies.push_back({});
     }
 
+    bool hasCycleUtil(int v, unordered_map<int, bool>& visited, unordered_map<int, bool>& recStack) const {
+        if (!visited[v]) {
+            visited[v] = true;
+            recStack[v] = true;
+
+            for (int dep : findEventById(v).dependencies) {
+                if (!visited[dep] && hasCycleUtil(dep, visited, recStack)) {
+                    return true;
+                } else if (recStack[dep]) {
+                    return true;
+                }
+            }
+        }
+        recStack[v] = false;
+        return false;
+    }
+
+    bool hasCycle() const {
+        unordered_map<int, bool> visited;
+        unordered_map<int, bool> recStack;
+        for (const auto& event : events) {
+            if (hasCycleUtil(event.id, visited, recStack)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void addDependency(int fromEventId, int toEventId) {
         int fromIndex = -1, toIndex = -1;
         for (size_t i = 0; i < events.size(); ++i) {
@@ -36,6 +64,11 @@ public:
         if (fromIndex != -1 && toIndex != -1) {
             dependencies[fromIndex].push_back(toEventId);
             events[fromIndex].dependencies.insert(toEventId);
+            if (hasCycle()) {
+                dependencies[fromIndex].pop_back();
+                events[fromIndex].dependencies.erase(toEventId);
+                throw runtime_error("Adding this dependency creates a cycle");
+            }
         }
     }
 
@@ -520,7 +553,13 @@ int main() {
             avlTree.visualize(); // Implement this function in your AVLTree class
             break;
         case 7:
-            add_dependency(graph);
+            try{
+                add_dependency(graph);
+            }catch (const runtime_error& e) {
+                mvprintw(2, 0, "Error: %s", e.what());
+            }
+            mvprintw(LINES - 1, 0, "Press any key to return to the main menu...");
+            getch();
             break;
         case 8: {
             clear();
@@ -529,33 +568,38 @@ int main() {
                 vector<Event> sortedEvents = graph.topologicalSort();
                 int row = 1;
                 for (const auto& event : sortedEvents) {
-                    mvprintw(row++, 0, "%d: %s (%s %s-%s)", event.id, event.name.c_str(), event.date.c_str(), event.startTime.c_str(), event.endTime.c_str());
+                    mvprintw(row++, 0, "Event-id: %d", event.id);
                 }
             } catch (const runtime_error& e) {
                 mvprintw(2, 0, "Error: %s", e.what());
             }
             refresh();
-            mvprintw(LINES - 1, 0, "Press any key to return to the main menu...");
+            mvprintw(5, 0, "Press any key to return to the main menu...");
             getch();
             break;
         }
         case 9: {
-            clear();
-            mvprintw(0, 0, "Enter the event-id: ");
-            int t;
-            scanw("%d", &t);
-            try {
-               Event event;
-               event=graph.findEventById(t);
-               mvprintw(1, 0, "%d: %s (%s %s-%s)", event.id, event.name.c_str(), event.date.c_str(), event.startTime.c_str(), event.endTime.c_str());
-            } catch (const runtime_error& e) {
-                mvprintw(2, 0, "Error: %s", e.what());
-            }
-            refresh();
-            mvprintw(3, 0, "Press any key to return to the main menu...");
-            getch();
-            break;
-        }
+    clear();
+    mvprintw(0, 0, "Enter the event-id: ");
+    int t;
+    scanw("%d", &t);
+    try {
+       Event event;
+       event = graph.findEventById(t);
+       mvprintw(2, 0, "Event-id: %d\nEvent name: %s\nDate:%s\nTiming: %s-%s", event.id, event.name.c_str(), event.date.c_str(), event.startTime.c_str(), event.endTime.c_str());
+    } catch (const runtime_error& e) {
+        mvprintw(3, 0, "Error: %s", e.what());
+        mvprintw(5, 0, "Press any key to return to the main menu...");
+        refresh();
+        getch();
+        break; // Added to exit the switch statement
+    }
+    mvprintw(6, 0, "Press any key to return to the main menu...");
+    refresh();
+    getch();
+    break; // Added to exit the switch statement
+}
+
         case 10:
             endwin(); // End ncurses mode
             return 0;
